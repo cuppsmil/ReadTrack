@@ -9,11 +9,11 @@ import sqlite3
 import zipfile
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Callable, Dict, List, Tuple
+from typing import Callable, Dict, List
 
 from dotenv import load_dotenv
 
-# конфигурация и логирование
+# ================= КОНФИГУРАЦИЯ И ЛОГИРОВАНИЕ =================
 load_dotenv()
 DB_PATH = Path(os.getenv("DB_PATH", "readtrack.db"))
 BACKUP_DIR = Path("backups")
@@ -26,7 +26,7 @@ logging.basicConfig(
 )
 
 
-# утилиты и функциональные конструкции
+# ================= УТИЛИТЫ И ФУНКЦИОНАЛЬНЫЕ КОНСТРУКЦИИ ========
 def create_author_filter(author_name: str) -> Callable[[Dict], bool]:
     """Фабрика замыканий для фильтрации книг по автору."""
     return lambda book: author_name.lower() in book.get("author", "").lower()
@@ -59,7 +59,7 @@ def safe_date(value: str) -> str:
         return datetime.now().strftime("%Y-%m-%d")
 
 
-# работа с БД
+# ================= РАБОТА С БАЗОЙ ДАННЫХ =====================
 def init_db() -> None:
     """Инициализация таблицы books."""
     with sqlite3.connect(DB_PATH) as conn:
@@ -154,65 +154,117 @@ def delete_book(book_id: int) -> bool:
     return False
 
 
-# аналитика и отчеты
-def get_weekly_report() -> Dict:
-    """Расчёт еженедельной статистики."""
+# ================= АНАЛИТИКА И ОТЧЁТЫ ========================
+def show_weekly_report() -> None:
+    """Расчёт и вывод еженедельной статистики (исправленная логика)."""
     books = _fetch_all()
     week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    today = datetime.now()
 
-    started_this_week = list(
-        filter(lambda b: b["start_date"] and b["start_date"] >= week_ago, books)
-    )
+    # 🔹 Книги, начатые на этой неделе
+    started_this_week = [
+        b for b in books if b.get("start_date") and b["start_date"] >= week_ago
+    ]
+
+    # 🔹 Книги, завершённые на этой неделе (но НЕ начатые на этой неделе)
+    finished_this_week = [
+        b
+        for b in books
+        if b["status"] == "completed"
+        and b.get("finish_date")
+        and b["finish_date"] >= week_ago
+        and b.get("start_date")
+        and b["start_date"] < week_ago  # начата ДО этой недели
+    ]
+
+    # Подсчёт страниц:
+    # - Для книг, начатых на этой неделе: берём текущий прогресс (current_page)
+    # - Для книг, завершённых на этой неделе (начатых ранее): берём ВСЕ страницы (total_pages)
+    # - Исключаем дублирование: книга не может быть в обоих списках одновременно
+    pages_from_started = sum(b["current_page"] for b in started_this_week)
+    pages_from_finished = sum(b["total_pages"] for b in finished_this_week)
+    total_pages_read = pages_from_started + pages_from_finished
+
+    # 🔹 Расчёт среднего темпа: от самой ранней даты активности
+    active_books = started_this_week + finished_this_week
+    avg_pace = 0.0
+    if active_books:
+        dates = [b["start_date"] for b in started_this_week if b.get("start_date")] + [
+            b["finish_date"] for b in finished_this_week if b.get("finish_date")
+        ]
+        if dates:
+            min_date = min(dates)
+            days = max(1, (today - datetime.strptime(min_date, "%Y-%m-%d")).days)
+            avg_pace = round(total_pages_read / days, 1)
+
+    print("\n📊 Еженедельный отчёт:")
+    print(f"  📅 Начато книг: {len(started_this_week)}")
+    print(f"  ✅ Завершено книг: {len(finished_this_week)}")
+    print(f"  📖 Страниц прочитано: {total_pages_read}")
+    print(f"  ⚡ Средний темп: {avg_pace} стр./день")
+    print("-" * 42)
+
+
+def show_recommendation() -> None:
+    """Генерация рекомендации на основе завершённых книг."""
+    books = _fetch_all()
     completed = list(filter(lambda b: b["status"] == "completed", books))
 
-    pages_read = sum(b["current_page"] for b in started_this_week)
-    avg_pace = 0
-    if started_this_week:
-        days = max(
-            1,
-            (
-                datetime.now()
-                - datetime.strptime(started_this_week[0]["start_date"], "%Y-%m-%d")
-            ).days,
+    if not completed:
+        print(
+            "📚 Пока нет завершённых книг. Читайте больше для получения рекомендаций!"
         )
-        avg_pace = round(sum(b["current_page"] for b in started_this_week) / days, 2)
+        return
 
-    return {
-        "pages": pages_read,
-        "completed_count": len(completed),
-        "avg_pace": avg_pace,
-    }
-
-
-def get_recommendation() -> str:
-    """Рекомендация жанра на основе завершённых книг."""
-    books = _fetch_all()
-    completed = filter(lambda b: b["status"] == "completed", books)
-    genres = {}
+    # Подсчёт жанров
+    genres: Dict[str, int] = {}
     for b in completed:
-        g = b.get("genre", "").strip().lower()
+        g = b.get("genre", "Не указан").strip().lower()
         if g:
             genres[g] = genres.get(g, 0) + 1
 
-    if not genres:
-        return "Нет завершённых книг для рекомендации."
+    top_genre, count = max(genres.items(), key=lambda x: x[1])
 
-    top_genre = max(genres, key=genres.get)
-    return (
-        f"Вы успешно завершили {genres[top_genre]} книг в жанре "
-        f"«{top_genre}». Рекомендуем продолжить в этом направлении!"
+    # 🔹 map для форматирования списка жанров
+    other_genres = list(map(lambda g: f"«{g.title()}»", sorted(genres.keys())))
+    print("\n💡 Рекомендация:")
+    print(f"   Вы успешно завершили {count} книг в жанре «{top_genre.title()}».")
+    print(f"   Попробуйте классику или новинки этого направления!")
+    print(f"   (Ваша библиотека также содержит: {', '.join(other_genres)})")
+    print("-" * 42)
+
+
+def show_progress() -> None:
+    """Визуализация прогресса чтения в консоли."""
+    books = _fetch_all()
+    active = list(filter(lambda b: b["status"] == "reading", books))
+
+    if not active:
+        print("📖 Нет книг в процессе чтения.")
+        return
+
+    # 🔹 sorted + lambda: сортировка по % прочтения (убывание)
+    sorted_active = sorted(
+        active,
+        key=lambda b: b["current_page"] / max(1, b["total_pages"]),
+        reverse=True,
     )
 
+    # 🔹 map: преобразование словарей в строки отчёта
+    progress_lines = map(
+        lambda b: (
+            f"📘 {b['title']:<30} | {format_progress_bar(b['current_page'], b['total_pages'])} "
+            f"| {b['current_page']}/{b['total_pages']} стр."
+        ),
+        sorted_active,
+    )
 
-def print_progress(books: List[Dict]) -> None:
-    """Вывод прогресса по текущим книгам."""
-    active = filter(lambda b: b["status"] == "reading", books)
-    for b in sorted(active, key=lambda x: x.get("current_page", 0)):
-        pct = format_progress_bar(b["current_page"], b["total_pages"])
-        print(f"📖 {b['title']} {pct}")
+    print("\n📈 Прогресс по текущим книгам:")
+    print("\n".join(progress_lines))
+    print("-" * 42)
 
 
-# экспорт/импорт/бэкап
+# ================= ЭКСПОРТ / ИМПОРТ / БЭКАП ===================
 def auto_backup() -> None:
     """Создание резервной копии БД с меткой времени."""
     try:
@@ -318,7 +370,7 @@ def import_data(zip_path: str) -> None:
     logging.info(f"Данные импортированы из {zpath.name}")
 
 
-# консольный интерфейс
+# ================= КОНСОЛЬНЫЙ ИНТЕРФЕЙС =======================
 def print_menu() -> None:
     menu = (
         "\n=== ReadTrack ===\n"
@@ -375,14 +427,16 @@ def handle_list() -> None:
         val = input("Автор: ").strip()
         filtered = list(filter(create_author_filter(val), books))
 
-    # Использование map для форматирования вывода
+    # 🔹 map для форматирования вывода
     lines = map(
-        lambda b: f"#{b['id']} | {b['title']} | {b['author']} "
-        f"| {b['status']} | {b['current_page']}/{b['total_pages']}",
+        lambda b: (
+            f"#{b['id']} | {b['title']} | {b['author']} "
+            f"| {b['status']} | {b['current_page']}/{b['total_pages']}"
+        ),
         filtered,
     )
     print("\n" + "\n".join(lines) + "\n")
-    print_progress(filtered)
+    show_progress()  # вызов визуализации прогресса
 
 
 def handle_edit() -> None:
@@ -400,7 +454,6 @@ def handle_edit() -> None:
         )
 
         changes = {}
-        # Конфигурация полей: (ключ БД, подсказка для пользователя)
         fields_config = [
             ("title", "Название"),
             ("author", "Автор"),
@@ -418,7 +471,6 @@ def handle_edit() -> None:
             current_val = book.get(db_key, "")
             user_input = input(f"{prompt} [{current_val}]: ").strip()
 
-            # Пропускаем, если пользователь ничего не ввел
             if not user_input:
                 continue
 
@@ -520,12 +572,25 @@ def handle_progress() -> None:
 
 
 def handle_reports() -> None:
-    report = get_weekly_report()
-    print(f"\n📊 Еженедельный отчёт:")
-    print(f"  Страниц прочитано: {report['pages']}")
-    print(f"  Завершено книг:    {report['completed_count']}")
-    print(f"  Средний темп:      {report['avg_pace']} стр/день")
-    print(f"\n💡 {get_recommendation()}\n")
+    """Подменю отчётов и аналитики."""
+    while True:
+        print("\n📊 Отчёты и аналитика:")
+        print("1. Еженедельный отчёт")
+        print("2. Рекомендация по жанрам")
+        print("3. Прогресс чтения (визуализация)")
+        print("4. Назад в главное меню")
+        choice = input("Выберите действие: ").strip()
+
+        if choice == "1":
+            show_weekly_report()
+        elif choice == "2":
+            show_recommendation()
+        elif choice == "3":
+            show_progress()
+        elif choice == "4":
+            break
+        else:
+            print("⚠️ Неверный выбор. Попробуйте снова.")
 
 
 def handle_data() -> None:
