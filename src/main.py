@@ -13,7 +13,7 @@ from typing import Callable, Dict, List
 
 from dotenv import load_dotenv
 
-# ================= КОНФИГУРАЦИЯ И ЛОГИРОВАНИЕ =================
+#КОНФИГУРАЦИЯ И ЛОГИРОВАНИЕ 
 load_dotenv()
 DB_PATH = Path(os.getenv("DB_PATH", "readtrack.db"))
 BACKUP_DIR = Path("backups")
@@ -26,7 +26,7 @@ logging.basicConfig(
 )
 
 
-# ================= УТИЛИТЫ И ФУНКЦИОНАЛЬНЫЕ КОНСТРУКЦИИ ========
+#УТИЛИТЫ И ФУНКЦИОНАЛЬНЫЕ КОНСТРУКЦИИ
 def create_author_filter(author_name: str) -> Callable[[Dict], bool]:
     """Фабрика замыканий для фильтрации книг по автору."""
     return lambda book: author_name.lower() in book.get("author", "").lower()
@@ -59,7 +59,7 @@ def safe_date(value: str) -> str:
         return datetime.now().strftime("%Y-%m-%d")
 
 
-# ================= РАБОТА С БАЗОЙ ДАННЫХ =====================
+#РАБОТА С БАЗОЙ ДАННЫХ
 def init_db() -> None:
     """Инициализация таблицы books."""
     with sqlite3.connect(DB_PATH) as conn:
@@ -154,19 +154,19 @@ def delete_book(book_id: int) -> bool:
     return False
 
 
-# ================= АНАЛИТИКА И ОТЧЁТЫ ========================
+#АНАЛИТИКА И ОТЧЁТЫ
 def show_weekly_report() -> None:
     """Расчёт и вывод еженедельной статистики (исправленная логика)."""
     books = _fetch_all()
     week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
     today = datetime.now()
 
-    # 🔹 Книги, начатые на этой неделе
+    #  Книги, начатые на этой неделе
     started_this_week = [
         b for b in books if b.get("start_date") and b["start_date"] >= week_ago
     ]
 
-    # 🔹 Книги, завершённые на этой неделе (но НЕ начатые на этой неделе)
+    #  Книги, завершённые на этой неделе (но НЕ начатые на этой неделе)
     finished_this_week = [
         b
         for b in books
@@ -185,7 +185,7 @@ def show_weekly_report() -> None:
     pages_from_finished = sum(b["total_pages"] for b in finished_this_week)
     total_pages_read = pages_from_started + pages_from_finished
 
-    # 🔹 Расчёт среднего темпа: от самой ранней даты активности
+    #  Расчёт среднего темпа: от самой ранней даты активности
     active_books = started_this_week + finished_this_week
     avg_pace = 0.0
     if active_books:
@@ -197,11 +197,11 @@ def show_weekly_report() -> None:
             days = max(1, (today - datetime.strptime(min_date, "%Y-%m-%d")).days)
             avg_pace = round(total_pages_read / days, 1)
 
-    print("\n📊 Еженедельный отчёт:")
-    print(f"  📅 Начато книг: {len(started_this_week)}")
-    print(f"  ✅ Завершено книг: {len(finished_this_week)}")
-    print(f"  📖 Страниц прочитано: {total_pages_read}")
-    print(f"  ⚡ Средний темп: {avg_pace} стр./день")
+    print("\nЕженедельный отчёт:")
+    print(f"Начато книг: {len(started_this_week)}")
+    print(f"Завершено книг: {len(finished_this_week)}")
+    print(f" Страниц прочитано: {total_pages_read}")
+    print(f" Средний темп: {avg_pace} стр./день")
     print("-" * 42)
 
 
@@ -212,7 +212,7 @@ def show_recommendation() -> None:
 
     if not completed:
         print(
-            "📚 Пока нет завершённых книг. Читайте больше для получения рекомендаций!"
+            "Пока нет завершённых книг. Читайте больше для получения рекомендаций!"
         )
         return
 
@@ -225,9 +225,9 @@ def show_recommendation() -> None:
 
     top_genre, count = max(genres.items(), key=lambda x: x[1])
 
-    # 🔹 map для форматирования списка жанров
+    #map для форматирования списка жанров
     other_genres = list(map(lambda g: f"«{g.title()}»", sorted(genres.keys())))
-    print("\n💡 Рекомендация:")
+    print("\nРекомендация:")
     print(f"   Вы успешно завершили {count} книг в жанре «{top_genre.title()}».")
     print(f"   Попробуйте классику или новинки этого направления!")
     print(f"   (Ваша библиотека также содержит: {', '.join(other_genres)})")
@@ -240,31 +240,31 @@ def show_progress() -> None:
     active = list(filter(lambda b: b["status"] == "reading", books))
 
     if not active:
-        print("📖 Нет книг в процессе чтения.")
+        print("Нет книг в процессе чтения.")
         return
 
-    # 🔹 sorted + lambda: сортировка по % прочтения (убывание)
+    #sorted + lambda: сортировка по % прочтения (убывание)
     sorted_active = sorted(
         active,
         key=lambda b: b["current_page"] / max(1, b["total_pages"]),
         reverse=True,
     )
 
-    # 🔹 map: преобразование словарей в строки отчёта
+    #map: преобразование словарей в строки отчёта
     progress_lines = map(
         lambda b: (
-            f"📘 {b['title']:<30} | {format_progress_bar(b['current_page'], b['total_pages'])} "
+            f"{b['title']:<30} | {format_progress_bar(b['current_page'], b['total_pages'])} "
             f"| {b['current_page']}/{b['total_pages']} стр."
         ),
         sorted_active,
     )
 
-    print("\n📈 Прогресс по текущим книгам:")
+    print("\nПрогресс по текущим книгам:")
     print("\n".join(progress_lines))
     print("-" * 42)
 
 
-# ================= ЭКСПОРТ / ИМПОРТ / БЭКАП ===================
+#ЭКСПОРТ / ИМПОРТ / БЭКАП
 def auto_backup() -> None:
     """Создание резервной копии БД с меткой времени."""
     try:
@@ -370,7 +370,7 @@ def import_data(zip_path: str) -> None:
     logging.info(f"Данные импортированы из {zpath.name}")
 
 
-# ================= КОНСОЛЬНЫЙ ИНТЕРФЕЙС =======================
+#КОНСОЛЬНЫЙ ИНТЕРФЕЙС
 def print_menu() -> None:
     menu = (
         "\n=== ReadTrack ===\n"
@@ -398,9 +398,9 @@ def handle_add() -> None:
             raise ValueError("Страниц должно быть > 0")
         status = input("Статус (planned/reading/completed): ").strip() or "planned"
         add_book(title, author, year, genre, pages, status=status)
-        print("✅ Книга добавлена.")
+        print("Книга добавлена.")
     except Exception as exc:
-        print(f"❌ Ошибка: {exc}")
+        print(f"Ошибка: {exc}")
 
 
 def handle_list() -> None:
@@ -427,7 +427,7 @@ def handle_list() -> None:
         val = input("Автор: ").strip()
         filtered = list(filter(create_author_filter(val), books))
 
-    # 🔹 map для форматирования вывода
+    #map для форматирования вывода
     lines = map(
         lambda b: (
             f"#{b['id']} | {b['title']} | {b['author']} "
@@ -445,10 +445,10 @@ def handle_edit() -> None:
         bid = safe_int(input("\n🔍 Введите ID книги для редактирования: "))
         book = next((b for b in _fetch_all() if b["id"] == bid), None)
         if not book:
-            print("❌ Книга не найдена.")
+            print(" Книга не найдена.")
             return
 
-        print(f"\n📝 Редактирование: {book['title']} (ID: {bid})")
+        print(f"\n Редактирование: {book['title']} (ID: {bid})")
         print(
             "💡 Оставьте поле пустым (нажмите Enter), чтобы сохранить текущее значение.\n"
         )
@@ -507,19 +507,19 @@ def handle_edit() -> None:
             if valid:
                 changes[db_key] = new_val
             else:
-                print(f"⚠️ Неверный формат для поля '{db_key}'. Пропущено.")
+                print(f" Неверный формат для поля '{db_key}'. Пропущено.")
 
         if not changes:
-            print("✅ Изменений не внесено.")
+            print(" Изменений не внесено.")
             return
 
-        # 🧠 Умная логика: автокоррекция при совпадении страниц
+        # Умная логика: автокоррекция при совпадении страниц
         curr_page = changes.get("current_page", book["current_page"])
         total_pages = changes.get("total_pages", book["total_pages"])
 
         if curr_page > total_pages:
             print(
-                "⚠️ Текущая страница превышает общее количество. Скорректировано до max."
+                " Текущая страница превышает общее количество. Скорректировано до max."
             )
             changes["current_page"] = total_pages
 
@@ -535,8 +535,8 @@ def handle_edit() -> None:
         # Сохраняем в БД
         update_book(bid, **changes)
 
-        # 📊 Детальный отчёт об изменениях
-        print("\n💾 Успешно сохранено!")
+        #  Детальный отчёт об изменениях
+        print("\n Успешно сохранено!")
         print("Внесённые изменения:")
         for key, new_val in changes.items():
             old_val = book.get(key)
@@ -544,7 +544,7 @@ def handle_edit() -> None:
         logging.info(f"Книга #{bid} обновлена. Изменения: {changes}")
 
     except Exception as exc:
-        print(f"❌ Ошибка при редактировании: {exc}")
+        print(f" Ошибка при редактировании: {exc}")
         logging.error(f"Ошибка handle_edit: {exc}")
 
 
@@ -554,10 +554,10 @@ def handle_progress() -> None:
         page = safe_int(input("Текущая страница: "))
         book = next((b for b in _fetch_all() if b["id"] == bid), None)
         if not book:
-            print("❌ Книга не найдена.")
+            print("Книга не найдена.")
             return
         if page > book["total_pages"]:
-            print("⚠️ Страница больше общего количества.")
+            print(" Страница больше общего количества.")
             return
         update_book(bid, current_page=page)
         if page == book["total_pages"]:
@@ -568,13 +568,13 @@ def handle_progress() -> None:
         else:
             print(format_progress_bar(page, book["total_pages"]))
     except Exception as exc:
-        print(f"❌ Ошибка: {exc}")
+        print(f"Ошибка: {exc}")
 
 
 def handle_reports() -> None:
     """Подменю отчётов и аналитики."""
     while True:
-        print("\n📊 Отчёты и аналитика:")
+        print("\n Отчёты и аналитика:")
         print("1. Еженедельный отчёт")
         print("2. Рекомендация по жанрам")
         print("3. Прогресс чтения (визуализация)")
@@ -596,7 +596,7 @@ def handle_reports() -> None:
 def handle_data() -> None:
     """Подменю управления данными (экспорт/импорт)."""
     while True:
-        print("\n📦 Управление данными:")
+        print("\n Управление данными:")
         print("1. Экспорт в CSV")
         print("2. Экспорт в ZIP (CSV + JSON + Бэкап БД)")
         print("3. Импорт из ZIP-архива")
@@ -606,41 +606,41 @@ def handle_data() -> None:
         if choice == "1":
             try:
                 path = export_data("csv")
-                print(f"✅ CSV экспортирован: {path}")
+                print(f" CSV экспортирован: {path}")
             except Exception as exc:
-                print(f"❌ Ошибка экспорта: {exc}")
+                print(f" Ошибка экспорта: {exc}")
 
         elif choice == "2":
             try:
                 path = export_data("zip")
-                print(f"✅ ZIP-архив создан: {path}")
+                print(f"ZIP-архив создан: {path}")
             except Exception as exc:
-                print(f"❌ Ошибка экспорта: {exc}")
+                print(f"Ошибка экспорта: {exc}")
 
         elif choice == "3":
             try:
-                zpath = input("📂 Введите путь к ZIP-архиву: ").strip()
+                zpath = input(" Введите путь к ZIP-архиву: ").strip()
                 if not zpath:
-                    print("⚠️ Путь не указан.")
+                    print(" Путь не указан.")
                     continue
                 import_data(zpath)
-                print("✅ Импорт успешно завершён! Данные обновлены.")
+                print("Импорт успешно завершён! Данные обновлены.")
             except FileNotFoundError as exc:
-                print(f"❌ {exc}")
+                print(f"{exc}")
             except Exception as exc:
-                print(f"❌ Ошибка импорта: {exc}")
+                print(f"Ошибка импорта: {exc}")
 
         elif choice == "4":
             break
         else:
-            print("⚠️ Неверный выбор. Попробуйте снова.")
+            print("Неверный выбор. Попробуйте снова.")
 
 
 def main() -> None:
     """Точка входа приложения."""
     init_db()
     auto_backup()
-    print("📖 Добро пожаловать в ReadTrack!")
+    print("Добро пожаловать в ReadTrack!")
 
     while True:
         try:
@@ -661,17 +661,17 @@ def main() -> None:
             elif choice == "7":
                 handle_data()
             elif choice == "8":
-                print("👋 До встречи за чтением!")
+                print("До встречи за чтением!")
                 logging.info("Приложение завершено пользователем.")
                 break
             else:
-                print("⚠️ Неверный ввод.")
+                print("Неверный ввод.")
         except KeyboardInterrupt:
-            print("\n👋 Работа прервана.")
+            print("\nРабота прервана.")
             logging.warning("Принудительное завершение (Ctrl+C)")
             break
         except Exception as exc:
-            print(f"❌ Критическая ошибка: {exc}")
+            print(f"Критическая ошибка: {exc}")
             logging.error(f"Unhandled exception: {exc}")
 
 
